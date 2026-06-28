@@ -1,0 +1,6 @@
+{
+  "name": "SplitXpense",
+  "description": "SplitXpense is a beautiful expense-sharing app that helps friends, roommates, families, and travel groups track shared expenses, split bills, and settle balances easily.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,145 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Rule 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Secure Validation Helpers (Phase 3 Primitives)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isMemberOfGroup(groupId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/groups/$(groupId)) && 
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+
+    // --- Entity Specific Schemas (Anti-Update-Gaps) ---
+
+    // User Validator
+    function isValidUser(user, uid, isSelf) {
+      return user.keys().hasAll(['id', 'name', 'email', 'createdAt']) &&
+             user.keys().size() <= 6 &&
+             user.id == uid &&
+             (!isSelf || user.id == request.auth.uid) &&
+             user.name is string && user.name.size() <= 100 &&
+             user.email is string && user.email.size() <= 200 &&
+             user.createdAt is string;
+    }
+
+    // Group Validator
+    function isValidGroup(group) {
+      return group.keys().hasAll(['id', 'name', 'category', 'members', 'createdBy', 'createdAt', 'updatedAt', 'currency']) &&
+             group.keys().size() <= 10 &&
+             group.id is string && group.id.size() <= 64 &&
+             group.name is string && group.name.size() <= 100 &&
+             group.category is string && group.category.size() <= 50 &&
+             group.members is list && group.members.size() <= 100 &&
+             group.createdBy == request.auth.uid &&
+             group.createdAt is string &&
+             group.updatedAt is string;
+    }
+
+    // Expense Validator
+    function isValidExpense(exp) {
+      return exp.keys().hasAll(['id', 'expenseId', 'groupId', 'amount', 'description', 'category', 'date', 'paidBy', 'splitType', 'splits', 'createdBy', 'createdByUserId', 'createdByName', 'createdAt', 'updatedAt']) &&
+             exp.id is string && exp.id.size() <= 64 &&
+             exp.expenseId is string && exp.expenseId.size() <= 64 &&
+             exp.groupId is string && exp.groupId.size() <= 64 &&
+             exp.amount is number && exp.amount > 0 &&
+             exp.description is string && exp.description.size() <= 200 &&
+             exp.category is string && exp.category.size() <= 50 &&
+             exp.paidBy is string && exp.paidBy.size() <= 64 &&
+             exp.splits is list && exp.splits.size() > 0 &&
+             exp.createdBy == request.auth.uid &&
+             exp.createdByUserId == request.auth.uid &&
+             exp.createdByName is string && exp.createdByName.size() <= 100 &&
+             exp.createdAt is string &&
+             exp.updatedAt is string;
+    }
+
+    // Settlement Validator
+    function isValidSettlement(setL) {
+      return setL.keys().hasAll(['id', 'groupId', 'fromId', 'toId', 'amount', 'status', 'date', 'createdAt']) &&
+             setL.id is string && setL.id.size() <= 64 &&
+             setL.groupId is string && setL.groupId.size() <= 64 &&
+             setL.fromId is string && setL.fromId.size() <= 64 &&
+             setL.toId is string && setL.toId.size() <= 64 &&
+             setL.amount is number && setL.amount > 0 &&
+             setL.status in ['pending', 'completed'] &&
+             setL.date is string;
+    }
+
+    // --- Database Collections Match Rules ---
+
+    // Connection testing
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // 1. Users collection rules
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.id != null; // Explicitly evaluate resource.data to secure list query
+      allow create: if isSignedIn() && (
+        (userId == request.auth.uid && isValidUser(request.resource.data, userId, true)) ||
+        (userId != request.auth.uid && isValidUser(request.resource.data, userId, false))
+      );
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId, true);
+      allow delete: if false; // Profiles are immortal
+    }
+
+    // 2. Groups collection rules
+    match /groups/{groupId} {
+      allow get: if isMemberOfGroup(groupId);
+      allow list: if isSignedIn() && request.auth.uid in resource.data.members; // Enforce secure membership boundary list evaluation
+      allow create: if isSignedIn() && isValidGroup(request.resource.data);
+      allow update: if isMemberOfGroup(groupId) && (
+        // Action: standard updates on group settings
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'category', 'updatedAt', 'members'])
+      );
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      
+      // 3. Nested expenses rules (Relational Sync)
+      match /expenses/{expenseId} {
+        allow get, list: if isMemberOfGroup(groupId);
+        allow create: if isMemberOfGroup(groupId) && isValidExpense(request.resource.data);
+        allow update: if isMemberOfGroup(groupId) && (
+          (request.auth.uid == resource.data.createdByUserId && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'description', 'category', 'splits', 'notes', 'receiptUrl', 'updatedAt'])
+          )) ||
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'free') in ['premium', 'admin'] && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'description', 'category', 'splits', 'notes', 'receiptUrl', 'updatedAt', 'editedByPremiumName'])
+          ))
+        );
+        allow delete: if isMemberOfGroup(groupId) && (
+          request.auth.uid == resource.data.createdByUserId ||
+          request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'free') in ['premium', 'admin']
+        );
+      }
+
+      // 4. Nested settlements rules
+      match /settlements/{settlementId} {
+        allow get, list: if isMemberOfGroup(groupId);
+        allow create: if isMemberOfGroup(groupId) && isValidSettlement(request.resource.data);
+        allow update: if isMemberOfGroup(groupId) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
+          resource.data.status != 'completed' // Terminal state locking (Rule 6)
+        );
+        allow delete: if false; // Audits are immortal
+      }
+    }
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account registration and public details used across SplitXpense.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique user authentication ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human display name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address if authenticated or verified."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Fully qualified HTTP URL to user profile picture."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The ISO timestamp or Firestore ServerTimestamp when profile was created."
+        }
+      },
+      "required": ["id", "name", "email", "createdAt"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A shared project, trip, or accommodation with multiple members tracking common expenses.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID of the shared group."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the group (e.g. Room Rent, Goa Trip)."
+        },
+        "description": {
+          "type": "string",
+          "description": "An optional description of what the group tracks."
+        },
+        "category": {
+          "type": "string",
+          "description": "Core theme category, e.g., trip, rent, dining, project, other."
+        },
+        "members": {
+          "type": "array",
+          "description": "A strictly bounded array containing the user ID of all co-payers in the group."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The user ID of the creator of this group."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when this group was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the group details were last adjusted."
+        },
+        "currency": {
+          "type": "string",
+          "description": "Primary currency used for currency calculations in this group (e.g., INR, USD)."
+        }
+      },
+      "required": ["id", "name", "category", "members", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense Record",
+      "description": "An individual financial transaction added by a group member with granular split breakdowns.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID of this expense."
+        },
+        "expenseId": {
+          "type": "string",
+          "description": "The expense entity ID stored explicitly."
+        },
+        "groupId": {
+          "type": "string",
+          "description": "Parent group ID containing this transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The exact transaction total paid."
+        },
+        "description": {
+          "type": "string",
+          "description": "Label details summarizing what was bought (e.g., Dinner, Train ticket)."
+        },
+        "category": {
+          "type": "string",
+          "description": "Spending category (Food, Travel, Rent, Shopping, Bills, Entertainment, Other)."
+        },
+        "date": {
+          "type": "string",
+          "description": "Calendar Date of standard transaction."
+        },
+        "paidBy": {
+          "type": "string",
+          "description": "The user ID of the group member who physically fronted the cash/card query."
+        },
+        "splitType": {
+          "type": "string",
+          "enum": ["equal", "percentage", "custom", "shares"]
+        },
+        "splits": {
+          "type": "array",
+          "description": "Detailed breakdown mapping userIds to their split share amount, optional percentages or weights."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional custom texts detailing context about the transaction."
+        },
+        "receiptUrl": {
+          "type": "string",
+          "description": "An optional image attachment url representing the invoice receipt."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Account creator who registered the transaction."
+        },
+        "createdByUserId": {
+          "type": "string",
+          "description": "The unique user authentication ID who created this expense."
+        },
+        "createdByName": {
+          "type": "string",
+          "description": "The human display name of the creator who registered the transaction."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "System registration timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp indicating when the expense transaction details were updated."
+        }
+      },
+      "required": ["id", "expenseId", "groupId", "amount", "description", "category", "date", "paidBy", "splitType", "splits", "createdBy", "createdByUserId", "createdByName", "createdAt", "updatedAt"]
+    },
+    "Settlement": {
+      "title": "Settlement Record",
+      "description": "A payment from one user to other to zero out relative debt registers.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of this settlement transaction."
+        },
+        "groupId": {
+          "type": "string",
+          "description": "The group context where this settlement is made."
+        },
+        "fromId": {
+          "type": "string",
+          "description": "Sender transferring the fund."
+        },
+        "toId": {
+          "type": "string",
+          "description": "Receiver collection registry."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Exact money units being transferred."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "completed"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Method used: e.g. UPI, cash, other."
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of settling up."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes or transaction references/screenshots."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "System database entry date."
+        }
+      },
+      "required": ["id", "groupId", "fromId", "toId", "amount", "status", "date", "createdAt"]
+    },
+    "Notification": {
+      "title": "User Notification",
+      "description": "Alert triggered for expense registers, group additions, or settling updates.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID for the notice record."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Target recipient."
+        },
+        "title": {
+          "type": "string",
+          "description": "Notification brief title."
+        },
+        "message": {
+          "type": "string",
+          "description": "Detailed text description of the alert."
+        },
+        "type": {
+          "type": "string",
+          "description": "The trigger event namespace: e.g. expense_added, group_joined, settle_reminder."
+        },
+        "read": {
+          "type": "boolean",
+          "description": "Whether the user reviewed the alert notification."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO format timestamp."
+        }
+      },
+      "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Profile detail directories."
+    },
+    "groups/{groupId}": {
+      "schema": "Group",
+      "description": "Core tracker group definition structures."
+    },
+    "groups/{groupId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Granular shared expenses added inside group track records."
+    },
+    "groups/{groupId}/settlements/{settlementId}": {
+      "schema": "Settlement",
+      "description": "Granular settlement ledger registrations."
+    },
+    "users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Individual notifications list associated with a user profile."
+    }
+  }
+}
